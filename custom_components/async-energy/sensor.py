@@ -161,7 +161,7 @@ class JSONRetrievalCoordinator(DataUpdateCoordinator):
             # Name of the data. For logging purposes.
             name="Daily",
             # Polling interval. Will only be polled if there are subscribers.
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(hours=6),
         )
 
         self.my_api = my_api
@@ -172,6 +172,7 @@ class JSONRetrievalCoordinator(DataUpdateCoordinator):
         This is the place to pre-process the data to lookup tables
         so entities can quickly look up their data.
         """
+
         if "recorder" in self.hass.config.components:
             await _insert_statistics(self.hass)
 
