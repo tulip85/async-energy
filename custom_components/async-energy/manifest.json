@@ -5,7 +5,7 @@
   "documentation": "https://github.com/tulip85/async-energy",
   "requirements": [],
   "ssdp": [],
-  "version": "0.0.1",
+  "version": "0.0.2",
   "zeroconf": [],
   "homekit": {},
   "dependencies": [],

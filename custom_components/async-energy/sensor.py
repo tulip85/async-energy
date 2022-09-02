@@ -39,7 +39,7 @@ SENSORS: tuple[SensorEntityDescription, ...] = (
 )
 
 
-async def _get_statistics(day, hass, statistic_id):
+async def _get_statistics(days, hass, statistic_id):
     statistics = []
 
     try:
@@ -47,12 +47,8 @@ async def _get_statistics(day, hass, statistic_id):
 
         data = await get_instance(hass).async_add_executor_job(
             requests.get,
-            "http://192.168.0.131:8081/get-meter-data?year="
-            + str(day.year)
-            + "&month="
-            + str(day.month)
-            + "&day="
-            + str(day.day),
+            "http://192.168.0.131:8081/get-meter-data?aggregation=HOURLY&numdays="
+            + str(days),
         )
         consumption_data = data.json()
 
@@ -91,14 +87,7 @@ async def _get_statistics(day, hass, statistic_id):
             )
 
     except json.JSONDecodeError:
-        _LOGGER.error(
-            "There is no data available for "
-            + str(day.year)
-            + "-"
-            + str(day.month)
-            + "-"
-            + str(day.day)
-        )
+        _LOGGER.error("There has been an error")
 
     return statistics
 
@@ -116,13 +105,12 @@ async def _insert_statistics(hass):
     }
 
     # load stats for the last 7 days
-    for count in range(7, 0, -1):
-        statistics = await _get_statistics(
-            today - timedelta(days=count),
-            hass,
-            DOMAIN + ":" + SENSOR_ENERGY_NAME,
-        )
-        async_add_external_statistics(hass, metadata, statistics)
+    statistics = await _get_statistics(
+        7,
+        hass,
+        DOMAIN + ":" + SENSOR_ENERGY_NAME,
+    )
+    async_add_external_statistics(hass, metadata, statistics)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
