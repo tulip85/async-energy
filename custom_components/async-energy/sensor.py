@@ -44,17 +44,20 @@ async def _get_statistics(days, hass, statistic_id):
 
     try:
         # TODO: configurable API
-
+        print("getting data")
         data = await get_instance(hass).async_add_executor_job(
             requests.get,
-            "http://192.168.0.131:8081/get-meter-data?aggregation=HOURLY&numdays="
+            "http://192.168.0.131:8081/get-meter-data?aggregation=HOURLY&numfiles="
             + str(days),
         )
         consumption_data = data.json()
 
+        consumption_data = sorted(consumption_data, key=lambda x: x["ts"])
+
         # TODO: sort by timestamp
 
         first_timestamp = dt_util.utc_from_timestamp(consumption_data[0]["ts"])
+        print("first timestamp " + str(first_timestamp))
 
         last_stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -106,7 +109,7 @@ async def _insert_statistics(hass):
 
     # load stats for the last 7 days
     statistics = await _get_statistics(
-        7,
+        10,
         hass,
         DOMAIN + ":" + SENSOR_ENERGY_NAME,
     )
