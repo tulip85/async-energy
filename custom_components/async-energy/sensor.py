@@ -28,6 +28,9 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 SENSOR_ENERGY_NAME = "energy_consumption"
+SENSOR_ENERGY_COST_NAME = "energy_cost"
+sensor_name_kwh = DOMAIN + ":" + SENSOR_ENERGY_NAME
+sensor_name_price = DOMAIN + ":" + SENSOR_ENERGY_COST_NAME
 
 SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -36,69 +39,99 @@ SENSORS: tuple[SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         native_unit_of_measurement=ENERGY_KILO_WATT_HOUR,
     ),
+    SensorEntityDescription(
+        key="sensor." + SENSOR_ENERGY_COST_NAME,
+        name="Energy cost",
+        device_class=SensorDeviceClass.ENERGY,
+        native_unit_of_measurement="CHF",
+    ),
 )
 
 
-async def _get_statistics(days, hass, statistic_id):
-    statistics = []
+async def _get_statistics(days, hass):
+    statistics_kwh = []
+    statistcs_price = []
 
     try:
         # TODO: configurable API
-        print("getting data")
+
+        # get the data
         data = await get_instance(hass).async_add_executor_job(
             requests.get,
             "http://192.168.0.131:8081/get-meter-data?aggregation=HOURLY&numfiles="
             + str(days),
         )
         consumption_data = data.json()
-
         consumption_data = sorted(consumption_data, key=lambda x: x["ts"])
-
-        # TODO: sort by timestamp
-
         first_timestamp = dt_util.utc_from_timestamp(consumption_data[0]["ts"])
-        print("first timestamp " + str(first_timestamp))
 
-        last_stats = await get_instance(hass).async_add_executor_job(
+        # get the last values to start counting from
+        last_stats_kwh = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
             hass,
             first_timestamp - timedelta(hours=2),
             first_timestamp,
-            [statistic_id],
+            [sensor_name_kwh],
+        )
+        last_stats_chf = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            first_timestamp - timedelta(hours=2),
+            first_timestamp,
+            [sensor_name_kwh],
         )
         if (
-            len(last_stats) > 0
-            and DOMAIN + ":" + SENSOR_ENERGY_NAME in last_stats
-            and len(last_stats[DOMAIN + ":" + SENSOR_ENERGY_NAME]) > 0
+            len(last_stats_kwh) > 0
+            and sensor_name_kwh in last_stats_kwh
+            and len(last_stats_kwh[sensor_name_kwh]) > 0
         ):
-            temp = last_stats[DOMAIN + ":" + SENSOR_ENERGY_NAME]
+            temp = last_stats_kwh[sensor_name_kwh]
             energy_sum = temp[len(temp) - 1]["sum"]
             if energy_sum is None:
                 energy_sum = 0
         else:
             energy_sum = 0
 
+        if (
+            len(last_stats_chf) > 0
+            and sensor_name_price in last_stats_kwh
+            and len(last_stats_chf[sensor_name_price]) > 0
+        ):
+            temp = last_stats_chf[sensor_name_price]
+            price_sum = temp[len(temp) - 1]["sum"]
+            if price_sum is None:
+                price_sum = 0
+        else:
+            price_sum = 0
+
         # TODO: configure field names
         for item in consumption_data:
             energy_sum = energy_sum + item["values"]["consumption_kwh"]
+            price_sum = price_sum + item["values"]["price_chf"]
 
-            statistics.append(
+            statistics_kwh.append(
                 {
                     "start": dt_util.utc_from_timestamp(item["ts"]),
                     "sum": energy_sum,
                 }
             )
 
+            statistcs_price.append(
+                {
+                    "start": dt_util.utc_from_timestamp(item["ts"]),
+                    "sum": price_sum,
+                }
+            )
+
     except json.JSONDecodeError:
         _LOGGER.error("There has been an error")
 
-    return statistics
+    return {"price": statistcs_price, "kwh": statistics_kwh}
 
 
 async def _insert_statistics(hass):
-    today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-    metadata = {
+    metadata_kwh = {
         "source": DOMAIN,
         "statistic_id": DOMAIN + ":" + SENSOR_ENERGY_NAME,
         "unit_of_measurement": "kWh",
@@ -106,14 +139,19 @@ async def _insert_statistics(hass):
         "has_sum": True,
         "name": "Energy consumption",
     }
+    metadata_price = {
+        "source": DOMAIN,
+        "statistic_id": DOMAIN + ":" + SENSOR_ENERGY_COST_NAME,
+        "unit_of_measurement": "CHF",
+        "has_mean": False,
+        "has_sum": True,
+        "name": "Energy price",
+    }
 
     # load stats for the last 7 days
-    statistics = await _get_statistics(
-        10,
-        hass,
-        DOMAIN + ":" + SENSOR_ENERGY_NAME,
-    )
-    async_add_external_statistics(hass, metadata, statistics)
+    statistics = await _get_statistics(10, hass)
+    async_add_external_statistics(hass, metadata_kwh, statistics["kwh"])
+    async_add_external_statistics(hass, metadata_price, statistics["price"])
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -189,7 +227,7 @@ class ElectricityEntity(CoordinatorEntity, SensorEntity):
         self._attr_name = sensor.name
         self._attr_native_unit_of_measurement = sensor.native_unit_of_measurement
         self._attr_native_value = 0
-        self._attr_unique_id = "home"
+        self._attr_unique_id = sensor.key + "-home"
 
     @callback
     def _handle_coordinator_update(self) -> None:
