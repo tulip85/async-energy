@@ -72,6 +72,9 @@ async def _get_statistics(days, hass):
             first_timestamp - timedelta(hours=2),
             first_timestamp,
             [sensor_name_kwh],
+            ["hour"],
+            {"consumption_kwh": "kwh"},
+            ["sum"]
         )
         last_stats_chf = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -79,6 +82,9 @@ async def _get_statistics(days, hass):
             first_timestamp - timedelta(hours=2),
             first_timestamp,
             [sensor_name_kwh],
+            ["hour"],
+            {"consumption_kwh": "kwh"},
+            ["sum"]
         )
         if (
             len(last_stats_kwh) > 0
@@ -148,8 +154,8 @@ async def _insert_statistics(hass):
         "name": "Energy price",
     }
 
-    # load stats for the last 7 days
-    statistics = await _get_statistics(10, hass)
+    # load stats for the last 10 days
+    statistics = await _get_statistics(15, hass)
     async_add_external_statistics(hass, metadata_kwh, statistics["kwh"])
     async_add_external_statistics(hass, metadata_price, statistics["price"])
 
