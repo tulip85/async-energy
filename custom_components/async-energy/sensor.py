@@ -43,7 +43,7 @@ SENSORS: tuple[SensorEntityDescription, ...] = (
         key="sensor." + SENSOR_ENERGY_COST_NAME,
         name="Energy cost",
         device_class=SensorDeviceClass.ENERGY,
-        native_unit_of_measurement="CHF",
+        native_unit_of_measurement="kWh",
     ),
 )
 
