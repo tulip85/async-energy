@@ -27,6 +27,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+DAYS_TO_RETRIEVE = 10
 SENSOR_ENERGY_NAME = "energy_consumption"
 SENSOR_ENERGY_COST_NAME = "energy_cost"
 sensor_name_kwh = DOMAIN + ":" + SENSOR_ENERGY_NAME
@@ -155,7 +156,7 @@ async def _insert_statistics(hass):
     }
 
     # load stats for the last 10 days
-    statistics = await _get_statistics(15, hass)
+    statistics = await _get_statistics(DAYS_TO_RETRIEVE, hass)
     async_add_external_statistics(hass, metadata_kwh, statistics["kwh"])
     async_add_external_statistics(hass, metadata_price, statistics["price"])
 
