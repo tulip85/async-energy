@@ -59,7 +59,7 @@ async def _get_statistics(days, hass):
         # get the data
         data = await get_instance(hass).async_add_executor_job(
             requests.get,
-            "http://192.168.0.131:8081/get-meter-data?aggregation=HOURLY&numfiles="
+            "http://192.168.0.144:8081/get-meter-data?aggregation=HOURLY&numfiles="
             + str(days),
         )
         consumption_data = data.json()
