@@ -1,5 +1,5 @@
 {
-  "domain": "asyncenergy",
+  "domain": "async-energy",
   "name": "async-energy",
   "config_flow": true,
   "documentation": "https://github.com/tulip85/async-energy",
@@ -9,6 +9,7 @@
   "zeroconf": [],
   "homekit": {},
   "dependencies": [],
+  "issue_tracker": "https://github.com/tulip85/async-energy/issues",
   "codeowners": [
     "@tulip85"
   ],
