@@ -1,4 +1,4 @@
-"""Retrieve EKZ data from a custom API and push them to the energy tables (also retro-actively)"""
+"""Example integration using DataUpdateCoordinator."""
 
 from datetime import timedelta
 import logging
@@ -22,7 +22,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
-from homeassistant.const import UnitOfEnergy
+from homeassistant.const import ENERGY_KILO_WATT_HOUR
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ SENSORS: tuple[SensorEntityDescription, ...] = (
         key="sensor." + SENSOR_ENERGY_NAME,
         name="Energy consumption",
         device_class=SensorDeviceClass.ENERGY,
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        native_unit_of_measurement=ENERGY_KILO_WATT_HOUR,
     ),
     SensorEntityDescription(
         key="sensor." + SENSOR_ENERGY_COST_NAME,
@@ -59,10 +59,9 @@ async def _get_statistics(days, hass):
         # get the data
         data = await get_instance(hass).async_add_executor_job(
             requests.get,
-            "http://192.168.0.144:8000/get-meter-data?aggregation=HOURLY&numfiles="
+            "http://192.168.0.144:8081/get-meter-data?aggregation=HOURLY&numfiles="
             + str(days),
         )
-        
         consumption_data = data.json()
         consumption_data = sorted(consumption_data, key=lambda x: x["ts"])
         first_timestamp = dt_util.utc_from_timestamp(consumption_data[0]["ts"])

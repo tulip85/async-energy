@@ -18,7 +18,8 @@ from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticMetaData
 from homeassistant.const import (
     ATTR_ENTITY_ID,
-    EVENT_HOMEASSISTANT_START
+    EVENT_HOMEASSISTANT_START,
+    SOUND_PRESSURE_DB,
 )
 
 # TODO List the platforms that you want to support.
