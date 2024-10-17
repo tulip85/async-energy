@@ -1,4 +1,4 @@
-"""Example integration using DataUpdateCoordinator."""
+"""Retrieve EKZ data from a custom API and push them to the energy tables (also retro-actively)"""
 
 from datetime import timedelta
 import logging
@@ -62,6 +62,8 @@ async def _get_statistics(days, hass):
             "http://192.168.0.144:8081/get-meter-data?aggregation=HOURLY&numfiles="
             + str(days),
         )
+         _LOGGER.errro("Starting data retrieval")
+        
         consumption_data = data.json()
         consumption_data = sorted(consumption_data, key=lambda x: x["ts"])
         first_timestamp = dt_util.utc_from_timestamp(consumption_data[0]["ts"])
