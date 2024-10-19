@@ -1,5 +1,5 @@
 {
-  "domain": "async-energy",
+  "domain": "asyncenergy",
   "name": "async-energy",
   "config_flow": true,
   "documentation": "https://github.com/tulip85/async-energy",
