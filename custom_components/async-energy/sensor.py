@@ -144,6 +144,7 @@ async def _insert_statistics(hass):
         "unit_of_measurement": "kWh",
         "has_mean": False,
         "has_sum": True,
+        "mean_type": None,
         "name": "Energy consumption",
     }
     metadata_price = {
@@ -152,6 +153,7 @@ async def _insert_statistics(hass):
         "unit_of_measurement": "CHF",
         "has_mean": False,
         "has_sum": True,
+        "mean_type": None,
         "name": "Energy price",
     }
 
