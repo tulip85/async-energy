@@ -4,32 +4,35 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from datetime import datetime, timedelta
+from homeassistant.exceptions import ConfigEntryNotReady
 import logging
-import homeassistant.util.dt as dt_util
-from random import random
-from .const import DOMAIN
-from homeassistant.components.recorder.statistics import (
-    async_add_external_statistics,
-    get_last_statistics,
-)
-import json
-from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.models import StatisticMetaData
-from homeassistant.const import (
-    ATTR_ENTITY_ID,
-    EVENT_HOMEASSISTANT_START,
-)
+import requests
 
-# TODO List the platforms that you want to support.
-# For your initial PR, limit it to 1 platform.
+from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+API_URL = "http://192.168.0.144:8000/get-meter-data"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up async-energy from a config entry."""
-    # TODO Store an API object for your platforms to access
-    # hass.data[DOMAIN][entry.entry_id] = MyApi(...)
+    # Check API connectivity before forwarding to platforms
+    try:
+        response = await hass.async_add_executor_job(
+            requests.get,
+            f"{API_URL}?aggregation=HOURLY&numfiles=1",
+        )
+        response.raise_for_status()
+    except requests.RequestException as err:
+        _LOGGER.error("Failed to connect to energy API: %s", err)
+        raise ConfigEntryNotReady(f"Failed to connect to energy API: {err}") from err
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {"api_url": API_URL}
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
