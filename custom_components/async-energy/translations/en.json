@@ -5,15 +5,16 @@
         },
         "error": {
             "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error"
         },
         "step": {
             "user": {
                 "data": {
-                    "host": "Host",
-                    "password": "Password",
-                    "username": "Username"
+                    "api_url": "API URL",
+                    "location_name": "Location name"
+                },
+                "data_description": {
+                    "api_url": "Base URL of the energy API, for example http://192.168.0.144:8000"
                 }
             }
         }

@@ -1,46 +1,47 @@
-"""The async-energy integration."""
+"""The async-energy integration.
+
+This integration has no entities: it only imports meter data from an external
+API into Home Assistant's long-term statistics.
+"""
 from __future__ import annotations
 
+from datetime import datetime
+import logging
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-import logging
-import requests
+from homeassistant.helpers.event import async_track_time_interval
 
-from .const import DOMAIN
+from .api import ApiError
+from .const import CONF_API_URL
+from .importer import UPDATE_INTERVAL, StatisticsImporter
 
 _LOGGER = logging.getLogger(__name__)
-
-PLATFORMS: list[Platform] = [Platform.SENSOR]
-
-API_URL = "http://192.168.0.144:8000/get-meter-data"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up async-energy from a config entry."""
-    # Check API connectivity before forwarding to platforms
+    importer = StatisticsImporter(hass, entry.data[CONF_API_URL])
+
+    # Retry setup later if the API is not reachable yet.
     try:
-        response = await hass.async_add_executor_job(
-            requests.get,
-            f"{API_URL}?aggregation=HOURLY&numfiles=1",
-        )
-        response.raise_for_status()
-    except requests.RequestException as err:
-        _LOGGER.error("Failed to connect to energy API: %s", err)
-        raise ConfigEntryNotReady(f"Failed to connect to energy API: {err}") from err
+        await importer.async_import()
+    except ApiError as err:
+        raise ConfigEntryNotReady(str(err)) from err
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"api_url": API_URL}
+    async def _scheduled_import(_now: datetime) -> None:
+        try:
+            await importer.async_import()
+        except ApiError as err:
+            _LOGGER.warning("Could not update energy statistics: %s", err)
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
+    entry.async_on_unload(
+        async_track_time_interval(hass, _scheduled_import, UPDATE_INTERVAL)
+    )
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
+    return True
