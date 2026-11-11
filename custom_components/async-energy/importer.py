@@ -13,10 +13,13 @@ from homeassistant.components.recorder.statistics import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from .api import async_fetch_hourly
 from .archive import build_archive
 from .const import (
+    CONF_TARIFFS,
+    ISSUE_MISSING_TARIFF,
     CONF_INSTALLATION_ID,
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -25,6 +28,7 @@ from .const import (
     STATISTIC_ID_KWH,
     STATISTIC_ID_PRICE,
 )
+from .tariffs import DEFAULT_SCHEDULE, TariffSchedule, parse_schedule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,22 +84,56 @@ class StatisticsImporter:
             return float(rows[-1]["sum"])
         return 0.0
 
+    def _schedule(self) -> TariffSchedule:
+        """The user's tariff periods from the options, else the bundled default."""
+        text = self._entry.options.get(CONF_TARIFFS)
+        if not text:
+            return DEFAULT_SCHEDULE
+        try:
+            return parse_schedule(text)
+        except ValueError as err:
+            _LOGGER.error("Ignoring invalid tariffs in the options: %s", err)
+            return DEFAULT_SCHEDULE
+
+    def _update_tariff_issue(self, missing_days: list) -> None:
+        """Raise a Repairs issue while days lack a tariff, clear it otherwise."""
+        issue_id = f"{ISSUE_MISSING_TARIFF}_{self._entry.entry_id}"
+        if not missing_days:
+            ir.async_delete_issue(self._hass, DOMAIN, issue_id)
+            return
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_MISSING_TARIFF,
+            translation_placeholders={
+                "first_day": str(min(missing_days)),
+                "last_day": str(max(missing_days)),
+                "count": str(len(missing_days)),
+                "title": self._entry.title,
+            },
+        )
+
     async def async_import(self, days: int = DAYS_TO_RETRIEVE) -> None:
         """Fetch the latest `days` days and write them as statistics.
 
         Raises InvalidAuth for bad credentials, ApiError for other failures.
         """
         data = self._entry.data
-        readings = await async_fetch_hourly(
+        result = await async_fetch_hourly(
             self._hass,
             data[CONF_USERNAME],
             data[CONF_PASSWORD],
             data[CONF_INSTALLATION_ID],
             days,
             build_archive(self._hass, self._entry.options),
+            self._schedule(),
         )
+        self._update_tariff_issue(result.missing_tariff_days)
         items = sorted(
-            ((r.start, r.kwh, r.chf) for r in readings), key=lambda x: x[0]
+            ((r.start, r.kwh, r.chf) for r in result.readings), key=lambda x: x[0]
         )
 
         if not items:

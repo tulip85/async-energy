@@ -35,9 +35,11 @@ from .const import (
     CONF_INSTALLATION_ID,
     CONF_LOCATION_NAME,
     CONF_PASSWORD,
+    CONF_TARIFFS,
     CONF_USERNAME,
     DOMAIN,
 )
+from .tariffs import DEFAULT_SCHEDULE, parse_schedule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -148,23 +150,38 @@ class AsyncEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class AsyncEnergyOptionsFlow(OptionsFlow):
-    """Choose where (if anywhere) the raw EKZ responses are archived."""
+    """Options: where raw EKZ responses are archived, and the tariffs."""
 
-    def __init__(self) -> None:
-        self._archive = ARCHIVE_NONE
+    def _save(self, **changes: Any) -> ConfigFlowResult:
+        """Save options, keeping those this step doesn't touch."""
+        options = {**self.config_entry.options, **changes}
+        return self.async_create_entry(data=options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Choose what to configure."""
+        return self.async_show_menu(step_id="init", menu_options=["archive", "tariffs"])
+
+    async def async_step_archive(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Pick the archive target."""
         if user_input is not None:
-            self._archive = user_input[CONF_ARCHIVE]
-            if self._archive == ARCHIVE_DRIVE:
+            target = user_input[CONF_ARCHIVE]
+            if target == ARCHIVE_DRIVE:
                 return await self.async_step_drive()
-            return self.async_create_entry(data={CONF_ARCHIVE: self._archive})
+            # Leaving Drive: forget the stored service account key.
+            return self._save(
+                **{
+                    CONF_ARCHIVE: target,
+                    CONF_DRIVE_CREDENTIALS: None,
+                    CONF_DRIVE_FOLDER_ID: None,
+                }
+            )
 
         return self.async_show_form(
-            step_id="init",
+            step_id="archive",
             data_schema=vol.Schema(
                 {
                     vol.Required(
@@ -196,8 +213,8 @@ class AsyncEnergyOptionsFlow(OptionsFlow):
             except ValueError:
                 errors[CONF_DRIVE_CREDENTIALS] = "invalid_service_account"
             else:
-                return self.async_create_entry(
-                    data={
+                return self._save(
+                    **{
                         CONF_ARCHIVE: ARCHIVE_DRIVE,
                         CONF_DRIVE_CREDENTIALS: user_input[CONF_DRIVE_CREDENTIALS],
                         CONF_DRIVE_FOLDER_ID: user_input[CONF_DRIVE_FOLDER_ID].strip(),
@@ -225,4 +242,41 @@ class AsyncEnergyOptionsFlow(OptionsFlow):
                 },
             ),
             errors=errors,
+        )
+
+    async def async_step_tariffs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit the tariff periods (YAML). Leave empty to use the built-in tariffs."""
+        errors: dict[str, str] = {}
+        placeholders = {"error": ""}
+        if user_input is not None:
+            text = (user_input.get(CONF_TARIFFS) or "").strip()
+            if not text:
+                return self._save(**{CONF_TARIFFS: None})
+            try:
+                parse_schedule(text)
+            except ValueError as err:
+                errors[CONF_TARIFFS] = "invalid_tariffs"
+                placeholders["error"] = str(err)
+            else:
+                return self._save(**{CONF_TARIFFS: text})
+
+        current = (
+            user_input[CONF_TARIFFS]
+            if user_input
+            else self.config_entry.options.get(CONF_TARIFFS)
+            or DEFAULT_SCHEDULE.to_yaml()
+        )
+        return self.async_show_form(
+            step_id="tariffs",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_TARIFFS, description={"suggested_value": current}
+                    ): TextSelector(TextSelectorConfig(multiline=True))
+                }
+            ),
+            errors=errors,
+            description_placeholders=placeholders,
         )

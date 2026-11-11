@@ -38,3 +38,7 @@ ARCHIVE_LOCAL = "local"
 ARCHIVE_DRIVE = "google_drive"
 CONF_DRIVE_CREDENTIALS = "drive_service_account_json"
 CONF_DRIVE_FOLDER_ID = "drive_folder_id"
+
+# Optional user-defined tariff periods (YAML text); the bundled default is used if unset.
+CONF_TARIFFS = "tariffs"
+ISSUE_MISSING_TARIFF = "missing_tariff"

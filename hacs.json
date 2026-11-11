@@ -2,5 +2,5 @@
     "name": "async-energy",
     "hide_default_branch": true,
     "homeassistant": "2025.5.0",
-    "render_readme": false
+    "render_readme": true
 }
