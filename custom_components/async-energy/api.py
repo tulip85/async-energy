@@ -6,6 +6,7 @@ needed), then reads the consumption JSON.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
@@ -22,6 +23,7 @@ import homeassistant.util.dt as dt_util
 
 from .const import (
     CONSUMPTION_URL,
+    DOMAIN,
     DETAILED_KEYS,
     LOCAL_TIMEZONE,
     LOGIN_URL,
@@ -180,11 +182,40 @@ async def async_fetch_hourly(
     If `archive` is given it receives the raw responses (15 minute and daily).
     Raises InvalidAuth for bad credentials and ApiError for anything else.
     """
-    session = async_create_clientsession(
-        hass,
-        headers={"User-Agent": _USER_AGENT},
-        timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-    )
+    session, lock = _get_session(hass)
+    # One run at a time: the session's cookie jar holds the portal login.
+    async with lock:
+        session.cookie_jar.clear()
+        return await _async_fetch_hourly(
+            hass, session, username, password, installation_id, days, archive
+        )
+
+
+def _get_session(hass: HomeAssistant) -> tuple[aiohttp.ClientSession, asyncio.Lock]:
+    """Return the shared session (own cookie jar, closed by Home Assistant)."""
+    key = f"{DOMAIN}_ekz_session"
+    if key not in hass.data:
+        hass.data[key] = (
+            async_create_clientsession(
+                hass,
+                cookie_jar=aiohttp.CookieJar(),
+                headers={"User-Agent": _USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+            ),
+            asyncio.Lock(),
+        )
+    return hass.data[key]
+
+
+async def _async_fetch_hourly(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    username: str,
+    password: str,
+    installation_id: str,
+    days: int,
+    archive: ArchiveFn | None,
+) -> list[HourlyReading]:
     readings: list[HourlyReading] = []
     failures = 0
     today = dt_util.now(dt_util.get_time_zone(LOCAL_TIMEZONE)).date()
@@ -225,8 +256,6 @@ async def async_fetch_hourly(
         raise
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ApiError(f"Error talking to my.ekz.ch: {err}") from err
-    finally:
-        await session.close()
 
     if failures and not readings:
         raise ApiError("No day could be retrieved")
