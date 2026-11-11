@@ -11,11 +11,15 @@ from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
     statistics_during_period,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-import homeassistant.util.dt as dt_util
 
-from .api import ApiError, async_fetch_meter_data
+from .api import async_fetch_hourly
+from .archive import build_archive
 from .const import (
+    CONF_INSTALLATION_ID,
+    CONF_PASSWORD,
+    CONF_USERNAME,
     DAYS_TO_RETRIEVE,
     DOMAIN,
     STATISTIC_ID_KWH,
@@ -54,10 +58,10 @@ METADATA_PRICE = {
 class StatisticsImporter:
     """Fetch meter data and import it as external statistics."""
 
-    def __init__(self, hass: HomeAssistant, api_url: str) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the importer."""
         self._hass = hass
-        self._api_url = api_url
+        self._entry = entry
 
     async def _previous_sum(self, statistic_id: str, before: datetime) -> float:
         """Return the cumulative sum of the last statistic before `before`."""
@@ -76,32 +80,26 @@ class StatisticsImporter:
             return float(rows[-1]["sum"])
         return 0.0
 
-    async def async_import(self) -> None:
-        """Fetch the latest data and write it as statistics.
+    async def async_import(self, days: int = DAYS_TO_RETRIEVE) -> None:
+        """Fetch the latest `days` days and write them as statistics.
 
-        Raises ApiError if the API is unreachable or returns unusable data.
+        Raises InvalidAuth for bad credentials, ApiError for other failures.
         """
-        raw = await async_fetch_meter_data(self._hass, self._api_url, DAYS_TO_RETRIEVE)
-
-        try:
-            items = sorted(
-                (
-                    (
-                        dt_util.utc_from_timestamp(item["ts"]).replace(
-                            minute=0, second=0, microsecond=0
-                        ),
-                        float(item["values"]["consumption_kwh"]),
-                        float(item["values"]["price_chf"]),
-                    )
-                    for item in raw
-                ),
-                key=lambda x: x[0],
-            )
-        except (KeyError, TypeError, ValueError) as err:
-            raise ApiError(f"Unexpected data format from energy API: {err!r}") from err
+        data = self._entry.data
+        readings = await async_fetch_hourly(
+            self._hass,
+            data[CONF_USERNAME],
+            data[CONF_PASSWORD],
+            data[CONF_INSTALLATION_ID],
+            days,
+            build_archive(self._hass, self._entry.options),
+        )
+        items = sorted(
+            ((r.start, r.kwh, r.chf) for r in readings), key=lambda x: x[0]
+        )
 
         if not items:
-            _LOGGER.warning("Energy API returned no data")
+            _LOGGER.warning("EKZ returned no data")
             return
 
         # Continue counting from the statistics stored before the first sample.

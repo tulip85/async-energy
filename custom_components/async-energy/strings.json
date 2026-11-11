@@ -2,21 +2,77 @@
   "config": {
     "step": {
       "user": {
+        "description": "Log in with your my.ekz.ch account. The login is stored in Home Assistant and used to fetch your consumption.",
         "data": {
-          "api_url": "API URL",
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "installation_id": "Installation ID",
           "location_name": "Location name"
         },
         "data_description": {
-          "api_url": "Base URL of the energy API, for example http://192.168.0.144:8000"
+          "installation_id": "The installationId used in the my.ekz.ch consumption API (visible in the browser's network tab)."
+        }
+      },
+      "reauth_confirm": {
+        "description": "Enter your my.ekz.ch login again.",
+        "data": {
+          "username": "[%key:common::config_flow::data::username%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "installation_id": "Installation ID"
         }
       }
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]"
+    }
+  },
+  "services": {
+    "backfill": {
+      "name": "Backfill",
+      "description": "Re-import the last number of days of consumption from my.ekz.ch.",
+      "fields": {
+        "days": {
+          "name": "Days",
+          "description": "How many days back from yesterday to import (1-366)."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Archive raw data",
+        "description": "Optionally keep the raw responses from my.ekz.ch (15 minute and daily JSON). Statistics are imported either way.",
+        "data": {
+          "archive": "Archive target"
+        }
+      },
+      "drive": {
+        "title": "Google Drive",
+        "description": "Share a Drive folder with the service account's e-mail address (Editor), then paste its JSON key and the folder ID.",
+        "data": {
+          "drive_service_account_json": "Service account JSON key",
+          "drive_folder_id": "Drive folder ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_service_account": "Not a valid service account JSON key"
+    }
+  },
+  "selector": {
+    "archive": {
+      "options": {
+        "none": "Don't archive",
+        "local": "Local folder (config/ekz_raw)",
+        "google_drive": "Google Drive"
+      }
     }
   }
 }
