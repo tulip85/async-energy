@@ -32,7 +32,7 @@ from .const import (
     TYPE_15MIN,
     TYPE_DAILY,
 )
-from .tariffs import MissingTariff, get_tariff
+from .tariffs import DEFAULT_SCHEDULE, MissingTariff, TariffSchedule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +57,14 @@ class HourlyReading:
     start: datetime  # UTC, on the hour
     kwh: float
     chf: float
+
+
+@dataclass(frozen=True)
+class FetchResult:
+    """Readings plus the days skipped because no tariff covers them."""
+
+    readings: list[HourlyReading]
+    missing_tariff_days: list[date]
 
 
 class _LoginFormParser(HTMLParser):
@@ -146,7 +154,9 @@ async def _async_get_day(
 ArchiveFn = Callable[[str, str], Awaitable[None]]
 
 
-def hourly_from_detailed(day: date, detailed: dict[str, Any]) -> list[HourlyReading]:
+def hourly_from_detailed(
+    day: date, detailed: dict[str, Any], schedule: TariffSchedule = DEFAULT_SCHEDULE
+) -> list[HourlyReading]:
     """Sum the 15 minute values of one day into priced hourly readings."""
     zone = dt_util.get_time_zone(LOCAL_TIMEZONE)
     values = detailed["seriesHt"]["values"] + detailed["seriesNt"]["values"]
@@ -163,7 +173,7 @@ def hourly_from_detailed(day: date, detailed: dict[str, Any]) -> list[HourlyRead
             HourlyReading(
                 start=dt_util.as_utc(local),
                 kwh=kwh,
-                chf=kwh * get_tariff(local),
+                chf=kwh * schedule.rate(local),
             )
         )
     return readings
@@ -176,10 +186,12 @@ async def async_fetch_hourly(
     installation_id: str,
     days: int,
     archive: ArchiveFn | None = None,
-) -> list[HourlyReading]:
+    schedule: TariffSchedule = DEFAULT_SCHEDULE,
+) -> FetchResult:
     """Log in and return hourly readings for the `days` days ending yesterday.
 
     If `archive` is given it receives the raw responses (15 minute and daily).
+    Days that no tariff period covers are skipped and reported in the result.
     Raises InvalidAuth for bad credentials and ApiError for anything else.
     """
     session, lock = _get_session(hass)
@@ -187,7 +199,7 @@ async def async_fetch_hourly(
     async with lock:
         session.cookie_jar.clear()
         return await _async_fetch_hourly(
-            hass, session, username, password, installation_id, days, archive
+            hass, session, username, password, installation_id, days, archive, schedule
         )
 
 
@@ -215,7 +227,9 @@ async def _async_fetch_hourly(
     installation_id: str,
     days: int,
     archive: ArchiveFn | None,
-) -> list[HourlyReading]:
+    schedule: TariffSchedule,
+) -> FetchResult:
+    missing_tariff_days: list[date] = []
     readings: list[HourlyReading] = []
     failures = 0
     today = dt_util.now(dt_util.get_time_zone(LOCAL_TIMEZONE)).date()
@@ -230,7 +244,7 @@ async def _async_fetch_hourly(
                 )
                 if any(key not in detailed for key in DETAILED_KEYS):
                     raise ApiError(f"Response for {day} lacks {DETAILED_KEYS}")
-                day_readings = hourly_from_detailed(day, detailed)
+                day_readings = hourly_from_detailed(day, detailed, schedule)
                 if archive is not None:
                     await archive(f"{day}-detailed.json", text)
                     daily_text, _ = await _async_get_day(
@@ -239,6 +253,9 @@ async def _async_fetch_hourly(
                     await archive(f"{day}-daily.json", daily_text)
             except InvalidAuth:
                 raise
+            except MissingTariff:
+                missing_tariff_days.append(day)
+                continue
             except (
                 ApiError,
                 aiohttp.ClientError,
@@ -246,7 +263,6 @@ async def _async_fetch_hourly(
                 KeyError,
                 TypeError,
                 ValueError,
-                MissingTariff,
             ) as err:
                 failures += 1
                 _LOGGER.warning("Skipping %s: %s", day, err)
@@ -257,6 +273,6 @@ async def _async_fetch_hourly(
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ApiError(f"Error talking to my.ekz.ch: {err}") from err
 
-    if failures and not readings:
+    if failures and not readings and not missing_tariff_days:
         raise ApiError("No day could be retrieved")
-    return readings
+    return FetchResult(readings, missing_tariff_days)

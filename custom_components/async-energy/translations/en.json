@@ -47,6 +47,13 @@
   "options": {
     "step": {
       "init": {
+        "title": "Options",
+        "menu_options": {
+          "archive": "Archive raw data",
+          "tariffs": "Tariffs"
+        }
+      },
+      "archive": {
         "title": "Archive raw data",
         "description": "Optionally keep the raw responses from my.ekz.ch (15 minute and daily JSON). Statistics are imported either way.",
         "data": {
@@ -60,10 +67,18 @@
           "drive_service_account_json": "Service account JSON key",
           "drive_folder_id": "Drive folder ID"
         }
+      },
+      "tariffs": {
+        "title": "Tariffs",
+        "description": "One entry per period, with an inclusive date range and the peak and off-peak rate in CHF/kWh. Days not covered by any period are skipped and reported under Repairs. Clear the field to go back to the built-in tariffs. Changed tariffs apply to newly imported days; run the asyncenergy.backfill action to recalculate older ones.\n\n{error}",
+        "data": {
+          "tariffs": "Tariff periods (YAML)"
+        }
       }
     },
     "error": {
-      "invalid_service_account": "Not a valid service account JSON key"
+      "invalid_service_account": "Not a valid service account JSON key",
+      "invalid_tariffs": "Invalid tariffs, see the message above"
     }
   },
   "selector": {
@@ -73,6 +88,12 @@
         "local": "Local folder (config/ekz_raw)",
         "google_drive": "Google Drive"
       }
+    }
+  },
+  "issues": {
+    "missing_tariff": {
+      "title": "No tariff for some days",
+      "description": "{count} day(s) between {first_day} and {last_day} for {title} were not imported because no tariff period covers them. Add the missing period under Configure > Tariffs, then run the asyncenergy.backfill action to import those days."
     }
   }
 }
